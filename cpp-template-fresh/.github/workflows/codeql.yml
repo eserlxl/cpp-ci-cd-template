@@ -1,0 +1,115 @@
+# Copyright © 2025 Eser KUBALI <lxldev.contact@gmail.com>
+# SPDX-License-Identifier: GPL-3.0-or-later
+#
+# This file is part of vglog-filter and is licensed under
+# the GNU General Public License v3.0 or later.
+# See the LICENSE file in the project root for details.
+
+name: "CodeQL"
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+  schedule:
+    # Run security scan weekly on Sundays at 02:00 UTC
+    - cron: "0 2 * * 0"
+  workflow_dispatch:
+
+# Avoid duplicate runs for the same ref
+concurrency:
+  group: codeql-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  analyze:
+    name: Analyze (${{ matrix.language }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    permissions:
+      actions: read
+      contents: read
+      pull-requests: read
+      security-events: write
+
+    strategy:
+      fail-fast: false
+      matrix:
+        # Supported CodeQL languages for this repository.
+        # NOTE: Do NOT add "bash" here; CodeQL does not support shell scripts.
+        language: [ "cpp", "javascript", "python" ]
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Detect files for current language
+        id: check-files
+        run: |
+          set -euo pipefail
+          has_files() {
+            # Use git ls-files to consider only tracked files
+            git ls-files -- "$@" | grep -q .
+          }
+
+          case "${{ matrix.language }}" in
+            cpp)
+              if has_files '*.c' '*.cc' '*.cpp' '*.cxx' '*.h' '*.hh' '*.hpp' '*.hxx'; then
+                echo "files_found=true" >> "$GITHUB_OUTPUT"
+              else
+                echo "files_found=false" >> "$GITHUB_OUTPUT"
+              fi
+              ;;
+            javascript)
+              if has_files '*.js' '*.jsx' '*.ts' '*.tsx'; then
+                echo "files_found=true" >> "$GITHUB_OUTPUT"
+              else
+                echo "files_found=false" >> "$GITHUB_OUTPUT"
+              fi
+              ;;
+            python)
+              if has_files '*.py'; then
+                echo "files_found=true" >> "$GITHUB_OUTPUT"
+              else
+                echo "files_found=false" >> "$GITHUB_OUTPUT"
+              fi
+              ;;
+            *)
+              echo "files_found=false" >> "$GITHUB_OUTPUT"
+              ;;
+          esac
+
+      - name: Initialize CodeQL
+        if: steps.check-files.outputs.files_found == 'true'
+        uses: github/codeql-action/init@v3
+        with:
+          languages: ${{ matrix.language }}
+          # Enable extended security and quality queries
+          queries: security-extended,security-and-quality
+
+      - name: Autobuild
+        if: steps.check-files.outputs.files_found == 'true'
+        uses: github/codeql-action/autobuild@v3
+        # If autobuild fails (e.g., custom build system), replace with manual commands:
+        # with:
+        #   run: |
+        #     chmod +x build.sh
+        #     ./build.sh debug warnings clean
+
+      - name: Perform CodeQL Analysis
+        if: steps.check-files.outputs.files_found == 'true'
+        uses: github/codeql-action/analyze@v3
+        with:
+          category: "/language:${{ matrix.language }}"
+
+      - name: Skip analysis (no supported files)
+        if: steps.check-files.outputs.files_found == 'false'
+        run: |
+          echo "No '${{ matrix.language }}' files found in this repository."
+          echo "CodeQL analysis skipped for '${{ matrix.language }}'."
+          echo "For shell script security, use ShellCheck in a separate workflow."

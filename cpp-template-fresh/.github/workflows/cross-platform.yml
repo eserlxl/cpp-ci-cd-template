@@ -1,0 +1,191 @@
+# Copyright © 2025 Eser KUBALI <lxldev.contact@gmail.com>
+# SPDX-License-Identifier: GPL-3.0-or-later
+#
+# This file is part of vglog-filter and is licensed under
+# the GNU General Public License v3.0 or later.
+# See the LICENSE file in the project root for details.
+
+name: Cross-Platform Testing
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    shell: bash
+
+on:
+  push:
+    paths:
+      - 'src/**'
+      - 'CMakeLists.txt'
+      - 'build.sh'
+      - '.github/workflows/cross-platform.yml'
+  pull_request:
+    paths:
+      - 'src/**'
+      - 'CMakeLists.txt'
+      - 'build.sh'
+      - '.github/workflows/cross-platform.yml'
+  workflow_dispatch: {}
+
+env:
+  CI: "true"
+
+jobs:
+  test-ubuntu:
+    name: Ubuntu (native)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Install dependencies
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends build-essential cmake g++ make
+          cmake --version
+          g++ --version
+          chmod +x ./build.sh
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+      - name: Build and test
+        run: |
+          set -euo pipefail
+          ./build.sh performance warnings clean
+          test -x ./build/bin/vglog-filter
+          ./build/bin/vglog-filter --help
+          echo "==12345== Test input" | ./build/bin/vglog-filter >/dev/null || { echo "Smoke test failed"; exit 1; }
+          
+          # Test -k flag functionality
+          echo "==12345== Successfully downloaded debug" > test_k_flag.txt
+          echo "==12345== Test input" >> test_k_flag.txt
+          ./build/bin/vglog-filter -k test_k_flag.txt >/dev/null || { echo "-k flag test failed"; exit 1; }
+          rm -f test_k_flag.txt
+
+  test-arch:
+    name: Arch Linux (container)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+    container:
+      image: archlinux:latest
+    steps:
+      - name: Prepare git for checkout (Arch container)
+        run: |
+          set -euo pipefail
+          pacman -Syu --noconfirm --noprogressbar --disable-download-timeout
+          pacman -S --noconfirm --needed git ca-certificates
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Install dependencies
+        run: |
+          set -euo pipefail
+          pacman -S --noconfirm --needed base-devel cmake gcc make
+          cmake --version
+          g++ --version || gcc --version
+          chmod +x ./build.sh
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+      - name: Build and test
+        run: |
+          set -euo pipefail
+          ./build.sh performance warnings clean
+          test -x ./build/bin/vglog-filter
+          ./build/bin/vglog-filter --help
+          echo "==12345== Test input" | ./build/bin/vglog-filter >/dev/null || { echo "Smoke test failed"; exit 1; }
+          
+          # Test -k flag functionality
+          echo "==12345== Successfully downloaded debug" > test_k_flag.txt
+          echo "==12345== Test input" >> test_k_flag.txt
+          ./build/bin/vglog-filter -k test_k_flag.txt >/dev/null || { echo "-k flag test failed"; exit 1; }
+          rm -f test_k_flag.txt
+
+  test-fedora:
+    name: Fedora (container)
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+    container:
+      image: fedora:latest
+    steps:
+      - name: Prepare git for checkout (Fedora container)
+        run: |
+          set -euo pipefail
+          dnf -y update
+          dnf -y install git ca-certificates
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Install dependencies
+        run: |
+          set -euo pipefail
+          dnf -y install gcc-c++ cmake make
+          cmake --version
+          g++ --version
+          chmod +x ./build.sh
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+      - name: Build and test
+        run: |
+          set -euo pipefail
+          ./build.sh performance warnings clean
+          test -x ./build/bin/vglog-filter
+          ./build/bin/vglog-filter --help
+          echo "==12345== Test input" | ./build/bin/vglog-filter >/dev/null || { echo "Smoke test failed"; exit 1; }
+          
+          # Test -k flag functionality
+          echo "==12345== Successfully downloaded debug" > test_k_flag.txt
+          echo "==12345== Test input" >> test_k_flag.txt
+          ./build/bin/vglog-filter -k test_k_flag.txt >/dev/null || { echo "-k flag test failed"; exit 1; }
+          rm -f test_k_flag.txt
+
+  test-debian:
+    name: Debian (container)
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+    container:
+      image: debian:stable
+    steps:
+      - name: Prepare git for checkout (Debian container)
+        run: |
+          set -euo pipefail
+          export DEBIAN_FRONTEND=noninteractive
+          apt-get update
+          apt-get install -y --no-install-recommends git ca-certificates
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Install dependencies
+        run: |
+          set -euo pipefail
+          export DEBIAN_FRONTEND=noninteractive
+          apt-get update
+          apt-get install -y --no-install-recommends build-essential cmake g++ make
+          cmake --version
+          g++ --version
+          chmod +x ./build.sh
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+      - name: Build and test
+        run: |
+          set -euo pipefail
+          ./build.sh performance warnings clean
+          test -x ./build/bin/vglog-filter
+          ./build/bin/vglog-filter --help
+          echo "==12345== Test input" | ./build/bin/vglog-filter >/dev/null || { echo "Smoke test failed"; exit 1; }
+          
+          # Test -k flag functionality
+          echo "==12345== Successfully downloaded debug" > test_k_flag.txt
+          echo "==12345== Test input" >> test_k_flag.txt
+          ./build/bin/vglog-filter -k test_k_flag.txt >/dev/null || { echo "-k flag test failed"; exit 1; }
+          rm -f test_k_flag.txt 
